@@ -1,4 +1,5 @@
 import arraymancer, future, sequtils
 
-include autograd/autograd.nim,
-        autograd/tensor_ops.nim
+include autograd/autograd,
+        autograd/tensor_ops,
+        autograd/tensor_reduction_ops

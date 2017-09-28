@@ -3,7 +3,7 @@ type
   # We do not use Node[T: SomeReal] so that T can be nil in proc newContext[T]
 
   # To ease search, backward propagation procedures are prefixed with bp_
-  BackProp[T] = proc (gradient: Tensor[T]): Tensor[T] {.noSideEffect.}
+  BackProp[T] = proc (gradient: Tensor[T]): Tensor[T]
 
   Node[T] = object
     ## Represent an operation
@@ -96,22 +96,30 @@ proc grad*[T](v: Variable[T]): Grad[T] =
   # If needed it can be set to an arbitrary value (e.g. -1)
   let len = v.tape.len()
   let nodes = v.tape.nodes
+  # echo repr nodes # Check representation on stack/heap
 
   result.derivs = new seq[Tensor[T]]
 
-  var derivs = newSeqWith(len, zeros[T](v.value.shape))
+  var derivs = newSeqWith(len, zeros[T](1,1))
 
-  derivs[v.index] = ones[T](v.value.shape) #by default 1 Tensor
+  derivs[v.index] = ones[T](1,1) #by default 1 Tensor
 
   for i in countdown(len-1,0):
     let node = nodes[i]
     let deriv = derivs[i]
 
     for j in 0..1:
-      derivs[node.parents[j]] .+= node.weights[j](deriv) # For broadcasting the 1 size tensors
+      derivs[node.parents[j]] = derivs[node.parents[j]] .+ node.weights[j](deriv) # For broadcasting the 1 size tensors on both hand side
 
   result.derivs[] = derivs
 
 template wrt*[T](g: Grad[T], v: Variable[T]): Tensor[T] =
   ## Get the gradient with regards to a specific input value
   g.derivs[v.index]
+
+
+proc isScalar*[T](t: Tensor[T]): bool =
+  for dim in t.shape:
+    if dim != 1 and dim != 0:
+      return false
+  return true

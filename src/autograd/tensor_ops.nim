@@ -24,7 +24,11 @@ proc `-`*[T](lhs: Variable[T], rhs: Variable[T]): Variable[T] =
 
 # Multiplication
 proc bp_mul[T](hs: Tensor[T]): BackProp[T] =
-  (gradient: Tensor[T]) => gradient * transpose(hs)
+  return proc(gradient: Tensor[T]): Tensor[T] =
+    if not gradient.isScalar:
+      gradient * transpose(hs)
+    else:
+      gradient.data[0] * hs
 
 proc `*`*[T](lhs: Variable[T], rhs: Variable[T]): Variable[T] =
   return Variable[T](
@@ -33,18 +37,5 @@ proc `*`*[T](lhs: Variable[T], rhs: Variable[T]): Variable[T] =
            index: lhs.tape.push_binary(
              lhs.index, bp_mul[T](rhs.value),
              rhs.index, bp_mul[T](lhs.value)
-             )
-  )
-
-proc bp_bcmul[T](hs: Tensor[T]): BackProp[T] =
-  (gradient: Tensor[T]) => gradient .* transpose(hs)
-
-proc `.*`*[T](lhs: Variable[T], rhs: Variable[T]): Variable[T] =
-  return Variable[T](
-           tape: lhs.tape,
-           value: lhs.value .* rhs.value,
-           index: lhs.tape.push_binary(
-             lhs.index, bp_bcmul[T](rhs.value),
-             rhs.index, bp_bcmul[T](lhs.value)
              )
   )
