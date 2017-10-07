@@ -67,7 +67,7 @@ proc toMetadataArray*(va: varargs[int]): MetadataArray {.inline,noSideEffect.}=
   for i in 0 ..< va.len:
     result[i] = va[i]
 
-proc toSeq*(mda: MetadataArray): seq[int] {.inline,noSideEffect.} =
+proc metadata_toSeq*(mda: MetadataArray): seq[int] {.inline,noSideEffect.}=
   result = @[]
   var i = 0
   while i < mda.len and mda[i] != 0:

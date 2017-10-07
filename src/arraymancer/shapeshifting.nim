@@ -62,8 +62,12 @@ proc unsafeTranspose*(t: Tensor): Tensor {.noSideEffect, inline.}=
   ##   This proc does not guarantee that a ``let`` value is immutable.
   ##
   ## For N-d Tensor with shape (0, 1, 2 ... n-1) the resulting tensor will have shape (n-1, ... 2, 1, 0)
-  result.shape = t.shape.reversed
-  result.strides = t.strides.reversed
+  # TODO: create a transpose template, also for CudaTensors
+  var j = t.rank - 1
+  for i in 0..<t.rank:
+    result.shape[j] = t.shape[i]
+    result.strides[j] = t.strides[i]
+    dec(j)
   result.offset = t.offset
   shallowCopy(result.data, t.data)
 
@@ -132,7 +136,7 @@ proc reshape*(t: Tensor, new_shape: varargs[int]): Tensor =
   return t.reshape_with_copy(ns)
 
 template reshape_no_copy(t: AnyTensor, new_shape: varargs[int]): untyped =
-  let ns = @new_shape
+  let ns = @new_shape #TODO use stack alloc
   when compileOption("boundChecks"):
     check_nocopyReshape t
     check_reshape(t, ns)
@@ -143,11 +147,12 @@ template reshape_no_copy(t: AnyTensor, new_shape: varargs[int]): untyped =
       break
     inc matched_dims
 
-  result.shape = ns
+  result.shape = ns.toMetadataArray
 
   # Strides extended for unmatched dimension
+  # Todo, use stack alloc
   let ext_strides = result.shape[matched_dims..result.shape.high].shape_to_strides
-  result.strides = t.strides[0..<matched_dims] & ext_strides
+  result.strides = toMetadataArray(t.strides[0..<matched_dims] & ext_strides)
   result.offset = t.offset
 
 proc unsafeReshape*(t: Tensor, new_shape: varargs[int]): Tensor =
@@ -214,8 +219,8 @@ proc broadcast*[T: SomeNumber](val: T, shape: varargs[int]): Tensor[T] {.noSideE
   ## Warning ⚠:
   ##   A broadcasted tensor should not be modified and only used for computation.
   ##   Modifying any value from this broadcasted tensor will change all its values.
-  result.shape = @shape
-  result.strides = newSeqWith(result.shape.len, 0)
+  result.shape = shape.toMetadataArray
+  # result.strides ## Not-needed auto-init with 0
   result.offset = 0
   result.data = newSeqWith(1, val)
 
@@ -239,7 +244,7 @@ proc unsafeBroadcast2[T](a, b: Tensor[T]): tuple[a, b: Tensor[T]] {.noSideEffect
   ##   A broadcasted tensor should not be modified and only used for computation.
   let rank = max(a.rank, b.rank)
 
-  var shapeA, stridesA, shapeB, stridesB = newSeq[int](rank) # newSeq is initialized with 0
+  var shapeA, stridesA, shapeB, stridesB: MetadataArray # MetadataArray is initialized with 0
 
   for i in 0..<rank:
     let shape_A_iter = if i < rank: a.shape[i] else: 1
@@ -349,13 +354,6 @@ template squeezeT(t: var AnyTensor): untyped =
         t.shape[idx_real_dim] = t.shape[i]
         t.strides[idx_real_dim] = t.strides[i]
       inc idx_real_dim
-  
-  t.shape = t.shape[0..<idx_real_dim]
-  t.strides = t.strides[0..<idx_real_dim]
-
-  if t.rank == 0:
-    t.shape.add 1
-    t.strides.add 1
 
 proc squeeze*(t: AnyTensor): AnyTensor {.noSideEffect.}=
   ## Squeeze tensors. For example a Tensor of shape @[4,1,3] will become @[4,3]
@@ -382,9 +380,13 @@ template squeezeT(t: var AnyTensor, axis: int): untyped =
   when compileOption("boundChecks"):
     check_squeezeAxis(t, axis)
 
-  if t.rank > 1 and t.shape[axis] == 1: # We don't support rank 0 Tensor
-    t.shape.delete(axis)
-    t.strides.delete(axis)
+  if t.rank > 1 and t.shape[axis] == 1: # We don't support rank 0 Tensor #TODO: support !
+    for i in axis .. t.rank - 2:   # At t.rank-1, i+1 refer to undefined dimension
+      t.shape[i] = t.shape[i+1]
+      t.strides[i] = t.strides[i+1]
+    dec(t.rank)
+    t.shape[t.rank] = 0            # This is the previous t.rank - 1
+    t.strides[t.rank] = 0
 
 proc squeeze*(t: Tensor, axis: int): Tensor {.noSideEffect.}=
   ## Collapse the given axis, if the dimension is not 1, it does nothing.
@@ -414,14 +416,17 @@ template unsqueezeT(t: var AnyTensor, axis: int): untyped =
     check_unsqueezeAxis(t, axis)
 
   # set the stride to be consistent with the rest of the lib
-  var stride: int
+  var tmp_stride: int
   if axis >= t.rank:
-    stride = 1
+    tmp_stride = 1
   else:
-    stride = t.shape[axis]*t.strides[axis]
+    tmp_stride = t.shape[axis]*t.strides[axis]
 
-  t.shape.insert(1, axis)
-  t.strides.insert(stride, axis)
+  var tmp_shape = 1
+  inc(t.rank)
+  for i in axis..<t.rank:
+    swap(t.shape[i], tmp_shape)
+    swap(t.strides[i], tmp_stride)
 
 proc unsqueeze*(t: Tensor, axis: int): Tensor {.noSideEffect.}=
   ## Insert a new axis just before the given axis, increasing the tensor

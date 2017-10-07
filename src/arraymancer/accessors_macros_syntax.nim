@@ -103,6 +103,7 @@ proc check_steps(a,b, step:int) {.noSideEffect, inline.}=
 
 proc check_shape(a, b: Tensor) {.noSideEffect, inline.}=
   ## Compare shape
+  # TODO, printing should join up to rank
   if a.shape == b.shape:
     return
   else:
@@ -112,6 +113,18 @@ proc check_shape(a, b: Tensor) {.noSideEffect, inline.}=
                                        $a.shape.join("x") &
                                        " and " & $b.shape.join("x"))
 
+proc check_shape(a: Tensor, b: openarray) {.noSideEffect, inline.}=
+  let shape = b.shape.toMetadataArray
+  ## Compare shape
+  # TODO, printing should join up to rank
+  if a.shape == shape:
+    return
+  else:
+    for ai, bi in zip(a.shape, shape):
+      if ai != bi and not (ai == 0 or bi == 0): # We allow dim = 0 for initialization of concatenation with empty dimension
+        raise newException(IndexError, "Your tensors or openarrays do not have the same shape: " &
+                                       $a.shape.join("x") &
+                                       " and " & $shape.join("x"))
 
 # #########################################################################
 # Slicing notation
