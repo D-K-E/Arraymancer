@@ -44,9 +44,12 @@ proc transpose*(t: Tensor): Tensor {.noSideEffect, inline.}=
   ##
   ## For N-d Tensor with shape (0, 1, 2 ... n-1) the resulting tensor will have shape (n-1, ... 2, 1, 0)
   ##
-  ## Data is copied as-is and not modified.
-  result.shape = t.shape.reversed
-  result.strides = t.strides.reversed
+  ## Data is copied as-is and not modified
+  var j = t.rank - 1
+  for i in 0..<t.rank:
+    result.shape[j] = t.shape[i]
+    result.strides[j] = t.strides[i]
+    dec(j)
   result.offset = t.offset
   result.data = t.data
 

@@ -21,6 +21,8 @@ type
     Cpu,
     Cuda
 
+  MetadataArray = array[MAXRANK, int]
+
   Tensor*[T] = object
     # Size of the datastructure is 32 bytes - perfect !
     ## Tensor data structure stored on Cpu
@@ -29,8 +31,9 @@ type
     ##   - ``offset``: Offset to get the first item of the Tensor. Note: offset can be negative, in particular for slices.
     ##   - ``data``: A sequence that holds the actual data
     ## Fields are public so that external libraries can easily construct a Tensor.
-    shape*: seq[int]
-    strides*: seq[int]
+    rank*: int
+    shape*: MetadataArray
+    strides*: MetadataArray
     offset*: int
     data*: seq[T] # Perf note: seq are always deep copied on "var" assignement.
 
@@ -52,6 +55,7 @@ type
     ##
     ## In the future CudaTensor will leverage Nim compiler to automatically
     ## copy if a memory location would be used more than once in a mutable manner.
+    rank*: int
     shape*: seq[int]
     strides*: seq[int]
     offset*: int
@@ -59,26 +63,28 @@ type
 
   AnyTensor*[T] = Tensor[T] or CudaTensor[T]
 
-template rank*(t: AnyTensor): int =
-  ## Input:
-  ##     - A tensor
-  ## Returns:
-  ##     - Its rank
-  ##
-  ##   - 0 for scalar (unfortunately cannot be stored)
-  ##   - 1 for vector
-  ##   - 2 for matrices
-  ##   - N for N-dimension array
-  t.shape.len
+proc toMetadataArray*(va: varargs[int]): MetadataArray {.inline,noSideEffect.}=
+  for i in 0 ..< va.len:
+    result[i] = va[i]
+
+proc toSeq*(mda: MetadataArray): seq[int] {.inline,noSideEffect.} =
+  result = @[]
+  var i = 0
+  while i < mda.len and mda[i] != 0:
+    result.add(mda[i])
 
 proc size*(t: AnyTensor): int {.noSideEffect, inline.}=
   ## Input:
   ##     - A tensor
   ## Returns:
   ##     - The total number of elements it contains
-  t.shape.product
+  result = 1
+  for i in 0 ..< t.rank:
+    result *= t.shape[i]
 
-proc shape_to_strides*(shape: seq[int], layout: OrderType = rowMajor): seq[int] {.noSideEffect.} =
+proc shape_to_strides*(shape: seq[int], layout: OrderType = rowMajor): seq[int] {.deprecated, noSideEffect.} =
+  ## DEPRECATED: Arraymancer does not used seq anymore to store tensor metadata
+  ##
   ## Input:
   ##     - A shape (seq of int), for example @[3,5] for a 3x5 matrix
   ##     - Optionally rowMajor (C layout - default) or colMajor (Fortran)
@@ -91,6 +97,34 @@ proc shape_to_strides*(shape: seq[int], layout: OrderType = rowMajor): seq[int] 
     return (shape & 1)[1..shape.len].scanr(a * b)
 
   return (1 & shape)[0..shape.high].scanl(a * b)
+
+proc mstrides_from_shape(strides: var MetadataArray,
+                          shape: MetadataArray,
+                          rank: int,
+                          layout: OrderType = rowMajor) {.noSideEffect.} =
+  ## Input:
+  ##     - Strides that will be modified in place
+  ##     - Rank of the tensor
+  ##     - Optionally rowMajor (C layout - default) or colMajor (Fortran)
+  ##
+  ## Arraymancer defaults to rowMajor. Temporarily, CudaTensors are colMajor by default.
+  # See Design document for further considerations.
+
+  # TODO: explore returning "accum" as lots of initialization do a loop
+  # to get tensor.size
+
+  var accum = 1
+
+  if layout == rowMajor:
+    for i in countdown(rank-1,0):
+      strides[i] = accum
+      accum *= shape[i]
+    return
+
+  for i in 0 ..< rank:
+    strides[i] = accum
+    accum *= shape[i]
+  return
 
 proc is_C_contiguous*(t: AnyTensor): bool {.noSideEffect,inline.}=
   ## Check if the tensor follows C convention / is row major

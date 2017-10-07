@@ -34,9 +34,9 @@ proc check_nested_elements(shape: seq[int], len: int) {.noSideEffect, inline.}=
   if (shape.product != len):
     raise newException(IndexError, "Each nested sequence at the same level must have the same number of elements")
 
-template tensorCpu[T](out_shape: openarray, t: Tensor[T], layout: OrderType = rowMajor): untyped =
-  t.shape = @out_shape
-  t.strides = shape_to_strides(t.shape, layout)
+template tensorCpu[T](out_shape: openarray, t: var Tensor[T], layout: OrderType = rowMajor): untyped =
+  t.shape = out_shape.toMetadataArray()
+  mstrides_from_shape(t.strides, t.shape, t.rank, layout)
   t.offset = 0
 
 template toTensorCpu(s: typed): untyped =
