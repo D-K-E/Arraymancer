@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+include ./utils/arraymancer_exceptions
+
 proc check_size(a, b:AnyTensor)  {.noSideEffect.}=
   ## Check if the total number of elements match
   if a.size != b.size:
-    raise newException(ValueError, "Both Tensors should have the same total number of elements")
+    raise newException(IncompatibleSizeError, "Both Tensors should have the same total number of elements:\n Size of the tensor on the left: " &
+      $(a.size) & ".\n Size of the tensor on the right: " & $(b.size))
 
 proc copy_from*[T](dst: var Tensor[T], src: Tensor[T]) =
   ## Copy the data from a source Tensor. Both tensors must have the same number of elements

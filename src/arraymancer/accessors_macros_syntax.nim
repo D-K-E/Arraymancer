@@ -51,6 +51,8 @@
 # Slice to values from a view/Tensor - foo[^2..^1,2..4] = bar
 # Slice to values from view of same Tensor - foo[^2..^1,2..4] = foo[^1..^2|-1, 4..2|-1]
 
+include ./utils/arraymancer_exceptions
+
 
 type SteppedSlice* = object
   ## Internal: A slice object related to a tensor single dimension:
@@ -93,7 +95,7 @@ proc check_steps(a,b, step:int) {.noSideEffect, inline.}=
     # like shape of (3, 0)
     return
   if ((b-a) * step < 0):
-    raise newException(IndexError, "Your slice start: " &
+    raise newException(SliceStepError, "Your slice start: " &
                 $a & ", and stop: " &
                 $b & ", or your step: " &
                 $step &
@@ -108,7 +110,7 @@ proc check_shape(a, b: Tensor|openarray) {.noSideEffect, inline.}=
   else:
     for ai, bi in zip(a.shape, b.shape):
       if ai != bi and not (ai == 0 or bi == 0): # We allow dim = 0 for initialization of concatenation with empty dimension
-        raise newException(IndexError, "Your tensors or openarrays do not have the same shape: " &
+        raise newException(IncompatibleShapeError, "Your tensors or openarrays do not have the same shape: " &
                                        $a.shape.join("x") &
                                        " and " & $b.shape.join("x"))
 

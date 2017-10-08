@@ -53,11 +53,12 @@
 #         coord[k] = 0
 #         iter_pos -= backstrides[k]
 
+include ./utils/arraymancer_exceptions
 
 
 proc check_index(t: Tensor, idx: varargs[int]) {.noSideEffect.}=
   if idx.len != t.rank:
-    raise newException(IndexError, "Number of arguments: " &
+    raise newException(ArgRankError, "Number of arguments: " &
                     $(idx.len) &
                     ", is different from tensor rank: " &
                     $(t.rank))

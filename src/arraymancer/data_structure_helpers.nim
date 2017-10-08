@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+include ./utils/arraymancer_exceptions
 
 proc isNaiveIterable(t: AnyTensor): bool {.inline.}=
   ## If t is not a slice we can iterate with a naive for loop
@@ -29,4 +30,4 @@ proc getTransposeTarget(t: AnyTensor): TransposeType {.noSideEffect.}=
   ## Everytime it is worth it or fused with a BLAS operation we change the strides to Row-Major
   if is_C_contiguous(t): return TransposeType.noTranspose
   elif is_F_contiguous(t): return TransposeType.transpose
-  else: raise newException(ValueError,"Operation not supported for this matrix. It has a non-contiguous layout")
+  else: raise newException(TensorLayoutTypeError,"Operation not supported for this matrix. It has a non-contiguous layout")
